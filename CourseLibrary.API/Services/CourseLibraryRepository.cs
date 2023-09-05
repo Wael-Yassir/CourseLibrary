@@ -1,7 +1,9 @@
 ﻿using CourseLibrary.API.DbContexts;
 using CourseLibrary.API.Entities;
 using CourseLibrary.API.Helpers;
+using CourseLibrary.API.Models;
 using CourseLibrary.API.ResourceParameters;
+using CourseLibrary.API.Services.PropertyMappingService;
 using Microsoft.EntityFrameworkCore;
 
 namespace CourseLibrary.API.Services;
@@ -9,10 +11,14 @@ namespace CourseLibrary.API.Services;
 public class CourseLibraryRepository : ICourseLibraryRepository
 {
     private readonly CourseLibraryContext _context;
+    private readonly IPropertyMappingService _propertyMappingService;
 
-    public CourseLibraryRepository(CourseLibraryContext context)
+    public CourseLibraryRepository(
+        CourseLibraryContext context, IPropertyMappingService propertyMappingService)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _propertyMappingService = propertyMappingService ?? 
+            throw new ArgumentNullException(nameof(propertyMappingService));
     }
 
     public void AddCourse(Guid authorId, Course course)
@@ -153,6 +159,16 @@ public class CourseLibraryRepository : ICourseLibraryRepository
                     a => a.FirstName.Contains(searchQuery) ||
                     a.LastName.Contains(searchQuery) ||
                     a.MainCategory.Contains(searchQuery));
+        }
+
+        if (!string.IsNullOrWhiteSpace(resourceParameters.OrderBy))
+        {
+            // get property mapping dictionary to author
+            var authorPropertyMappingDictionary = _propertyMappingService
+                .GetPropertyMapping<AuthorDto, Author>();
+
+            authorCollections = authorCollections.ApplySort(
+                resourceParameters.OrderBy, authorPropertyMappingDictionary);
         }
 
         return await PagedList<Author>.CreateAsync(authorCollections, 

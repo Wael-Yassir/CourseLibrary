@@ -1,9 +1,11 @@
-﻿using CourseLibrary.API.DbContexts;
-using CourseLibrary.API.Services;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Serialization;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+
+using CourseLibrary.API.Services;
+using CourseLibrary.API.DbContexts;
+using CourseLibrary.API.Services.PropertyMappingService;
 
 namespace CourseLibrary.API;
 
@@ -49,6 +51,8 @@ internal static class StartupHelperExtensions
                     };
                 };
             });
+
+        builder.Services.AddTransient<IPropertyMappingService, PropertyMappingService>();
 
         builder.Services.AddScoped<ICourseLibraryRepository,
             CourseLibraryRepository>();
