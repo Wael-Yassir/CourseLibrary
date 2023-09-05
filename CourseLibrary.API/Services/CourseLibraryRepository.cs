@@ -1,11 +1,12 @@
 ﻿using CourseLibrary.API.DbContexts;
 using CourseLibrary.API.Entities;
+using CourseLibrary.API.Helpers;
 using CourseLibrary.API.ResourceParameters;
 using Microsoft.EntityFrameworkCore;
 
 namespace CourseLibrary.API.Services;
 
-public class CourseLibraryRepository : ICourseLibraryRepository 
+public class CourseLibraryRepository : ICourseLibraryRepository
 {
     private readonly CourseLibraryContext _context;
 
@@ -121,13 +122,13 @@ public class CourseLibraryRepository : ICourseLibraryRepository
 #pragma warning restore CS8603 // Possible null reference return.
     }
 
-   
+
     public async Task<IEnumerable<Author>> GetAuthorsAsync()
     {
         return await _context.Authors.ToListAsync();
     }
 
-    public async Task<IEnumerable<Author>>
+    public async Task<PagedList<Author>>
         GetAuthorsAsync(AuthorResourceParameters resourceParameters)
     {
         var authorCollections = _context.Authors as IQueryable<Author>;
@@ -154,7 +155,9 @@ public class CourseLibraryRepository : ICourseLibraryRepository
                     a.MainCategory.Contains(searchQuery));
         }
 
-        return await authorCollections.ToListAsync();
+        return await PagedList<Author>.CreateAsync(authorCollections, 
+                resourceParameters.PageNumber, 
+                resourceParameters.PageSize);
     }
 
     public async Task<IEnumerable<Author>> GetAuthorsAsync(IEnumerable<Guid> authorIds)

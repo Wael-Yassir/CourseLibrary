@@ -1,9 +1,11 @@
 ﻿
 using AutoMapper;
+using CourseLibrary.API.Helpers;
 using CourseLibrary.API.Models;
 using CourseLibrary.API.ResourceParameters;
 using CourseLibrary.API.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace CourseLibrary.API.Controllers;
 
@@ -11,8 +13,8 @@ namespace CourseLibrary.API.Controllers;
 [Route("api/[controller]")]
 public class AuthorsController : ControllerBase
 {
-    private readonly ICourseLibraryRepository _courseLibraryRepository;
     private readonly IMapper _mapper;
+    private readonly ICourseLibraryRepository _courseLibraryRepository;
 
     public AuthorsController(
         ICourseLibraryRepository courseLibraryRepository,
@@ -24,17 +26,36 @@ public class AuthorsController : ControllerBase
             throw new ArgumentNullException(nameof(mapper));
     }
 
-    [HttpGet]
+    [HttpGet(Name = nameof(GetAuthors))]
     [HttpHead]
     public async Task<ActionResult<IEnumerable<AuthorDto>>>
         GetAuthors([FromQuery] AuthorResourceParameters resourceParameters)
     { 
-        // get authors from repo
-        var authorsFromRepo = await _courseLibraryRepository
-            .GetAuthorsAsync(resourceParameters); 
+        var authorsPageVM = await _courseLibraryRepository
+            .GetAuthorsAsync(resourceParameters);
 
-        // return them
-        return Ok(_mapper.Map<IEnumerable<AuthorDto>>(authorsFromRepo));
+        var previousPageLink = authorsPageVM.HasPrevious 
+            ? CreateAuthorResourceUri(resourceParameters, ResourceUriType.PREVIOUS_PAGE)
+            : null;
+
+        var nextPageLink = authorsPageVM.HasNext
+            ? CreateAuthorResourceUri(resourceParameters, ResourceUriType.NEXT_PAGE)
+            : null;
+
+        var paginationMetaData = new
+        {
+            pageNumber = authorsPageVM.CurrentPage,
+            pageSize = authorsPageVM.PageSize,
+            totalCount = authorsPageVM.TotalCount,
+            totalPages = authorsPageVM.TotalPages,
+            previousPageLink,
+            nextPageLink,
+        };
+
+        HttpContext.Response.Headers
+            .Add("X-Pagination", JsonSerializer.Serialize(paginationMetaData));
+
+        return Ok(_mapper.Map<IEnumerable<AuthorDto>>(authorsPageVM));
     }
 
     [HttpGet("{authorId}", Name = nameof(GetAuthor))]
@@ -73,5 +94,42 @@ public class AuthorsController : ControllerBase
     {
         Request.Headers.Add("Allow", "GET,HEAD,PUT,OPTIONS");
         return Ok();
+    }
+
+    private string? CreateAuthorResourceUri(
+        AuthorResourceParameters resourceParameters, ResourceUriType uriType)
+    {
+        switch (uriType)
+        {
+            case ResourceUriType.PREVIOUS_PAGE:
+                return Url.Link(nameof(GetAuthors),
+                    new
+                    {
+                        pageNumber = resourceParameters.PageNumber - 1,
+                        pageSize = resourceParameters.PageSize,
+                        mainCategory = resourceParameters.MainCategory,
+                        searchQuery = resourceParameters.SearchQuery
+                    });
+                
+            case ResourceUriType.NEXT_PAGE:
+                return Url.Link(nameof(GetAuthors),
+                    new
+                    {
+                        pageNumber = resourceParameters.PageNumber + 1,
+                        pageSize = resourceParameters.PageSize,
+                        mainCategory = resourceParameters.MainCategory,
+                        searchQuery = resourceParameters.SearchQuery
+                    });
+
+            default:
+                return Url.Link(nameof(GetAuthors),
+                    new
+                    {
+                        pageNumber = resourceParameters.PageNumber,
+                        pageSize = resourceParameters.PageSize,
+                        mainCategory = resourceParameters.MainCategory,
+                        searchQuery = resourceParameters.SearchQuery
+                    });
+        }
     }
 }
