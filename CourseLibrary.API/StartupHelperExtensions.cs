@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CourseLibrary.API.Services;
 using CourseLibrary.API.DbContexts;
 using CourseLibrary.API.Services.PropertyMappingService;
+using CourseLibrary.API.Services.PropertyCheckerService;
 
 namespace CourseLibrary.API;
 
@@ -52,7 +54,11 @@ internal static class StartupHelperExtensions
                 };
             });
 
+        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddSwaggerGen();
+
         builder.Services.AddTransient<IPropertyMappingService, PropertyMappingService>();
+        builder.Services.AddTransient<IPropertyCheckerService, PropertyCheckerService>();
 
         builder.Services.AddScoped<ICourseLibraryRepository,
             CourseLibraryRepository>();
@@ -74,6 +80,9 @@ internal static class StartupHelperExtensions
         if (app.Environment.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();    // allow showing the stack trace for exception in development.
+
+            app.UseSwagger();
+            app.UseSwaggerUI();
         }
         else
         {

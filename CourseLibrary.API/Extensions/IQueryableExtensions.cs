@@ -2,7 +2,7 @@
 using System.Linq.Dynamic.Core;
 using CourseLibrary.API.Services.PropertyMappingService;
 
-namespace CourseLibrary.API.Helpers;
+namespace CourseLibrary.API.Extensions;
 
 public static class IQueryableExtensions
 {

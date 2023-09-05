@@ -1,5 +1,5 @@
 ﻿using AutoMapper;
-using CourseLibrary.API.Helpers;
+using CourseLibrary.API.Extensions;
 
 namespace CourseLibrary.API.Profiles;
 public class AuthorsProfile : Profile
@@ -15,4 +15,3 @@ public class AuthorsProfile : Profile
         CreateMap<Models.AuthorForCreationDto, Entities.Author>();
     }
 }
-

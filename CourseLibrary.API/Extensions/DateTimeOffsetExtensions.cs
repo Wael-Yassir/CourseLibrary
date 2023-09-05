@@ -1,5 +1,4 @@
-﻿
-namespace CourseLibrary.API.Helpers;
+﻿namespace CourseLibrary.API.Extensions;
 public static class DateTimeOffsetExtensions
 {
     public static int GetCurrentAge(this DateTimeOffset dateTimeOffset)

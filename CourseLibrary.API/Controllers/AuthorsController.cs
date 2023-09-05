@@ -1,11 +1,14 @@
 ﻿
 using AutoMapper;
+using CourseLibrary.API.Extensions;
 using CourseLibrary.API.Helpers;
 using CourseLibrary.API.Models;
 using CourseLibrary.API.ResourceParameters;
 using CourseLibrary.API.Services;
+using CourseLibrary.API.Services.PropertyCheckerService;
 using CourseLibrary.API.Services.PropertyMappingService;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using System.Text.Json;
 
 namespace CourseLibrary.API.Controllers;
@@ -17,11 +20,17 @@ public class AuthorsController : ControllerBase
     private readonly IMapper _mapper;
     private readonly ICourseLibraryRepository _courseLibraryRepository;
     private readonly IPropertyMappingService _propertyMappingService;
+    private readonly IPropertyCheckerService _propertyCheckerService;
+
+    // it is used as return when something goes wrong, as a way to pass more details to the client
+    private readonly ProblemDetailsFactory _problemDetailsFactory;      
 
     public AuthorsController(
         ICourseLibraryRepository courseLibraryRepository,
         IMapper mapper,
-        IPropertyMappingService propertyMappingService)
+        IPropertyMappingService propertyMappingService,
+        IPropertyCheckerService propertyCheckerService,
+        ProblemDetailsFactory problemDetailsFactory)
     {
         _courseLibraryRepository = courseLibraryRepository ??
             throw new ArgumentNullException(nameof(courseLibraryRepository));
@@ -29,15 +38,27 @@ public class AuthorsController : ControllerBase
             throw new ArgumentNullException(nameof(mapper));
         _propertyMappingService = propertyMappingService ??
             throw new ArgumentNullException(nameof(propertyMappingService));
+        _propertyCheckerService = propertyCheckerService ??
+            throw new ArgumentNullException(nameof(propertyCheckerService));
+        _problemDetailsFactory = problemDetailsFactory ??
+            throw new ArgumentNullException(nameof(problemDetailsFactory));
     }
 
     [HttpGet(Name = nameof(GetAuthors))]
     [HttpHead]
-    public async Task<ActionResult<IEnumerable<AuthorDto>>>
+    public async Task<IActionResult>
         GetAuthors([FromQuery] AuthorResourceParameters resourceParameters)
     {
         if (!_propertyMappingService.ValidMappingExistsFor<AuthorDto, Entities.Author>(resourceParameters.OrderBy))
             return BadRequest();
+
+        if(!_propertyCheckerService.TypeHasProperty<AuthorDto>(resourceParameters.Fields)) 
+            return BadRequest(
+                    _problemDetailsFactory.CreateProblemDetails(
+                        HttpContext,
+                        statusCode: 400,
+                        detail: $"Not all requested data shaping fields exist on the" +
+                        $" resource: {resourceParameters.Fields}"));
 
         var authorsPageVM = await _courseLibraryRepository
             .GetAuthorsAsync(resourceParameters);
@@ -63,12 +84,23 @@ public class AuthorsController : ControllerBase
         HttpContext.Response.Headers
             .Add("X-Pagination", JsonSerializer.Serialize(paginationMetaData));
 
-        return Ok(_mapper.Map<IEnumerable<AuthorDto>>(authorsPageVM));
+        var authorToReturn = _mapper.Map<IEnumerable<AuthorDto>>(authorsPageVM)
+            .ShapeData(resourceParameters.Fields);
+        
+        return Ok(authorToReturn);
     }
 
     [HttpGet("{authorId}", Name = nameof(GetAuthor))]
-    public async Task<ActionResult<AuthorDto>> GetAuthor(Guid authorId)
+    public async Task<IActionResult> 
+        GetAuthor(Guid authorId, string? fields)
     {
+        if (!_propertyCheckerService.TypeHasProperty<AuthorDto>(fields))
+            return BadRequest(
+                    _problemDetailsFactory.CreateProblemDetails(
+                        HttpContext,
+                        statusCode: 400,
+                        detail: $"Not all requested data shaping fields exist on the resource: {fields}"));
+
         // get author from repo
         var authorFromRepo = await _courseLibraryRepository.GetAuthorAsync(authorId);
 
@@ -78,7 +110,10 @@ public class AuthorsController : ControllerBase
         }
 
         // return author
-        return Ok(_mapper.Map<AuthorDto>(authorFromRepo));
+        var authorToReturn = _mapper.Map<AuthorDto>(authorFromRepo)
+            .ShapeData(fields);
+
+        return Ok(authorToReturn);
     }
 
     [HttpPost]
@@ -113,6 +148,7 @@ public class AuthorsController : ControllerBase
                 return Url.Link(nameof(GetAuthors),
                     new
                     {
+                        fields = resourceParameters.Fields,
                         orderBy = resourceParameters.OrderBy,
                         pageNumber = resourceParameters.PageNumber - 1,
                         pageSize = resourceParameters.PageSize,
@@ -124,6 +160,7 @@ public class AuthorsController : ControllerBase
                 return Url.Link(nameof(GetAuthors),
                     new
                     {
+                        fields = resourceParameters.Fields,
                         orderBy = resourceParameters.OrderBy,
                         pageNumber = resourceParameters.PageNumber + 1,
                         pageSize = resourceParameters.PageSize,
@@ -135,6 +172,7 @@ public class AuthorsController : ControllerBase
                 return Url.Link(nameof(GetAuthors),
                     new
                     {
+                        fields = resourceParameters.Fields,
                         orderBy = resourceParameters.OrderBy,
                         pageNumber = resourceParameters.PageNumber,
                         pageSize = resourceParameters.PageSize,
