@@ -26,7 +26,7 @@ public class CoursesController : ControllerBase
             throw new ArgumentNullException(nameof(mapper));
     }
 
-    [HttpGet]
+    [HttpGet(Name = nameof(GetCoursesForAuthor))]
     public async Task<ActionResult<IEnumerable<CourseDto>>> GetCoursesForAuthor(Guid authorId)
     {
         if (!await _courseLibraryRepository.AuthorExistsAsync(authorId))
@@ -56,7 +56,7 @@ public class CoursesController : ControllerBase
     }
 
 
-    [HttpPost]
+    [HttpPost(Name = nameof(CreateCourseForAuthor))]
     public async Task<ActionResult<CourseDto>> CreateCourseForAuthor(
             Guid authorId, CourseForCreationDto course)
     {

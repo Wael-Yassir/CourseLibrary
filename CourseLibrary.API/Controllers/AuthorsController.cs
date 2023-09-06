@@ -63,31 +63,39 @@ public class AuthorsController : ControllerBase
         var authorsPageVM = await _courseLibraryRepository
             .GetAuthorsAsync(resourceParameters);
 
-        var previousPageLink = authorsPageVM.HasPrevious 
-            ? CreateAuthorResourceUri(resourceParameters, ResourceUriType.PREVIOUS_PAGE)
-            : null;
-
-        var nextPageLink = authorsPageVM.HasNext
-            ? CreateAuthorResourceUri(resourceParameters, ResourceUriType.NEXT_PAGE)
-            : null;
-
         var paginationMetaData = new
         {
             pageNumber = authorsPageVM.CurrentPage,
             pageSize = authorsPageVM.PageSize,
             totalCount = authorsPageVM.TotalCount,
-            totalPages = authorsPageVM.TotalPages,
-            previousPageLink,
-            nextPageLink,
+            totalPages = authorsPageVM.TotalPages
         };
 
         HttpContext.Response.Headers
             .Add("X-Pagination", JsonSerializer.Serialize(paginationMetaData));
 
+        var links = CreateLinksForAuthors(
+            resourceParameters, authorsPageVM.HasPrevious, authorsPageVM.HasNext);
+
         var authorToReturn = _mapper.Map<IEnumerable<AuthorDto>>(authorsPageVM)
             .ShapeData(resourceParameters.Fields);
-        
-        return Ok(authorToReturn);
+
+        var shapedAuthorsWithLinks = authorToReturn.Select(author =>
+        {
+            var authorAsDictionary = author as IDictionary<string, object>;
+
+            var authorLinks = CreateLinksForAuthor((Guid)authorAsDictionary["Id"], null);
+            authorAsDictionary.Add("links", authorLinks);
+            return authorAsDictionary;
+        });
+
+        var linkedCollectionResources = new
+        {
+            value = shapedAuthorsWithLinks,
+            links
+        };
+
+        return Ok(linkedCollectionResources);
     }
 
     [HttpGet("{authorId}", Name = nameof(GetAuthor))]
@@ -109,25 +117,34 @@ public class AuthorsController : ControllerBase
             return NotFound();
         }
 
-        // return author
         var authorToReturn = _mapper.Map<AuthorDto>(authorFromRepo)
-            .ShapeData(fields);
+            .ShapeData(fields) as IDictionary<string, object>;
+
+        // create links (to support HATEOAS)
+        var links = CreateLinksForAuthor(authorId, fields);
+        
+        authorToReturn.Add("links", links);
 
         return Ok(authorToReturn);
     }
 
-    [HttpPost]
-    public async Task<ActionResult<AuthorDto>> CreateAuthor(AuthorForCreationDto author)
+    [HttpPost(Name = nameof(CreateAuthor))]
+    public async Task<IActionResult> CreateAuthor(AuthorForCreationDto author)
     {
         var authorEntity = _mapper.Map<Entities.Author>(author);
 
         _courseLibraryRepository.AddAuthor(authorEntity);
         await _courseLibraryRepository.SaveAsync();
 
-        var authorToReturn = _mapper.Map<AuthorDto>(authorEntity);
+        var authorDto = _mapper.Map<AuthorDto>(authorEntity);
+
+        var links = CreateLinksForAuthor(authorDto.Id, null);
+
+        var authorToReturn = authorDto.ShapeData(null) as IDictionary<string, object>;
+        authorToReturn.Add("links", links);
 
         return CreatedAtRoute(nameof(GetAuthor),
-            new { authorId = authorToReturn.Id },
+            new { authorId = authorToReturn["Id"] },
             authorToReturn);
     }
 
@@ -137,6 +154,67 @@ public class AuthorsController : ControllerBase
     {
         Request.Headers.Add("Allow", "GET,HEAD,PUT,OPTIONS");
         return Ok();
+    }
+
+    private List<LinkDto> 
+        CreateLinksForAuthor(Guid authorId, string? fields)
+    {
+        var links = new List<LinkDto>();
+
+        if (string.IsNullOrWhiteSpace(fields))
+            links.Add(new LinkDto(
+                    href: Url.Link(nameof(GetAuthor), new { authorId }),
+                    rel: "self",
+                    method: "GET"
+                ));
+        else
+            links.Add(new LinkDto(
+                    href: Url.Link(nameof(GetAuthor), new { authorId, fields }),
+                    rel: "self",
+                    method: "GET"
+                ));
+
+        links.Add(new LinkDto(
+            href: Url.Link("CreateCourseForAuthor", new { authorId }),
+            rel: "create_course_for_author",
+            method: "POST"
+        ));
+        links.Add(new LinkDto(
+            href: Url.Link("GetCoursesForAuthor", new { authorId }),
+            rel: "courses",
+            method: "GET"
+        ));
+
+
+        return links;
+    }
+
+    private List<LinkDto> CreateLinksForAuthors(
+        AuthorResourceParameters resourceParameters, bool hasPreviousPage, bool hasNextPage)
+    {
+        var links = new List<LinkDto>();
+
+        links.Add(new LinkDto(
+            href: CreateAuthorResourceUri(resourceParameters, ResourceUriType.CURRENT),
+            rel: "self",
+            method: "GET"
+        ));
+
+        if (hasPreviousPage)
+            links.Add(new LinkDto(
+                href: CreateAuthorResourceUri(resourceParameters, ResourceUriType.PREVIOUS_PAGE),
+                rel: "previousPage",
+                method: "GET"
+            ));
+
+        if (hasNextPage)
+            links.Add(new LinkDto(
+                href: CreateAuthorResourceUri(resourceParameters, ResourceUriType.NEXT_PAGE),
+                rel: "nextPage",
+                method: "GET"
+            ));
+
+        return links;
     }
 
     private string? CreateAuthorResourceUri(
@@ -168,6 +246,7 @@ public class AuthorsController : ControllerBase
                         searchQuery = resourceParameters.SearchQuery
                     });
 
+            case ResourceUriType.CURRENT:
             default:
                 return Url.Link(nameof(GetAuthors),
                     new
