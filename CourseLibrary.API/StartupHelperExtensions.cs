@@ -1,5 +1,4 @@
-﻿using Microsoft.OpenApi.Models;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -8,6 +7,7 @@ using CourseLibrary.API.Services;
 using CourseLibrary.API.DbContexts;
 using CourseLibrary.API.Services.PropertyMappingService;
 using CourseLibrary.API.Services.PropertyCheckerService;
+using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace CourseLibrary.API;
 
@@ -53,6 +53,20 @@ internal static class StartupHelperExtensions
                     };
                 };
             });
+
+        // to configure hateoas media type, we an access to the newtonsoft json formatter to add
+        // the media type on it, but it can only be accessed after the call to AddNewtonsoftJson()
+        builder.Services.Configure<MvcOptions>(config =>
+        {
+            var newtonsoftJsonOutputFormatter = config.OutputFormatters
+                .OfType<NewtonsoftJsonOutputFormatter>().FirstOrDefault();
+
+            if (newtonsoftJsonOutputFormatter != null)
+            {
+                newtonsoftJsonOutputFormatter.SupportedMediaTypes
+                    .Add("application/vnd.marvin.hateoas+json");
+            }
+        });
 
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();

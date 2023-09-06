@@ -9,7 +9,9 @@ using CourseLibrary.API.Services.PropertyCheckerService;
 using CourseLibrary.API.Services.PropertyMappingService;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.Net.Http.Headers;
 using System.Text.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace CourseLibrary.API.Controllers;
 
@@ -23,7 +25,7 @@ public class AuthorsController : ControllerBase
     private readonly IPropertyCheckerService _propertyCheckerService;
 
     // it is used as return when something goes wrong, as a way to pass more details to the client
-    private readonly ProblemDetailsFactory _problemDetailsFactory;      
+    private readonly ProblemDetailsFactory _problemDetailsFactory;
 
     public AuthorsController(
         ICourseLibraryRepository courseLibraryRepository,
@@ -52,7 +54,7 @@ public class AuthorsController : ControllerBase
         if (!_propertyMappingService.ValidMappingExistsFor<AuthorDto, Entities.Author>(resourceParameters.OrderBy))
             return BadRequest();
 
-        if(!_propertyCheckerService.TypeHasProperty<AuthorDto>(resourceParameters.Fields)) 
+        if (!_propertyCheckerService.TypeHasProperty<AuthorDto>(resourceParameters.Fields))
             return BadRequest(
                     _problemDetailsFactory.CreateProblemDetails(
                         HttpContext,
@@ -99,9 +101,17 @@ public class AuthorsController : ControllerBase
     }
 
     [HttpGet("{authorId}", Name = nameof(GetAuthor))]
-    public async Task<IActionResult> 
-        GetAuthor(Guid authorId, string? fields)
+    public async Task<IActionResult>
+        GetAuthor(Guid authorId, string? fields, [FromHeader(Name = "Accept")] string? mediaType)
     {
+        // check if the inputted media type is a valid media type
+        if (!MediaTypeHeaderValue.TryParse(mediaType, out var parsedMediaType))
+            return BadRequest(
+                _problemDetailsFactory.CreateProblemDetails(
+                    HttpContext,
+                    statusCode: 400,
+                    detail: $"Accept header media type is not a valid media type."));
+
         if (!_propertyCheckerService.TypeHasProperty<AuthorDto>(fields))
             return BadRequest(
                     _problemDetailsFactory.CreateProblemDetails(
@@ -118,12 +128,18 @@ public class AuthorsController : ControllerBase
         }
 
         var authorToReturn = _mapper.Map<AuthorDto>(authorFromRepo)
-            .ShapeData(fields) as IDictionary<string, object>;
+            .ShapeData(fields);
+                                          
+        if (parsedMediaType.MediaType == "application/vnd.marvin.hateoas+json")
+        {
+           var authorToReturnWithLinks = authorToReturn as IDictionary<string, object>;
+            
+            // create links (to support HATEOAS)
+            var links = CreateLinksForAuthor(authorId, fields);
+            authorToReturnWithLinks.Add("links", links);
 
-        // create links (to support HATEOAS)
-        var links = CreateLinksForAuthor(authorId, fields);
-        
-        authorToReturn.Add("links", links);
+            return Ok(authorToReturnWithLinks);
+        }
 
         return Ok(authorToReturn);
     }
@@ -156,7 +172,7 @@ public class AuthorsController : ControllerBase
         return Ok();
     }
 
-    private List<LinkDto> 
+    private List<LinkDto>
         CreateLinksForAuthor(Guid authorId, string? fields)
     {
         var links = new List<LinkDto>();
@@ -233,7 +249,7 @@ public class AuthorsController : ControllerBase
                         mainCategory = resourceParameters.MainCategory,
                         searchQuery = resourceParameters.SearchQuery
                     });
-                
+
             case ResourceUriType.NEXT_PAGE:
                 return Url.Link(nameof(GetAuthors),
                     new
