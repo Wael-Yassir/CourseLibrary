@@ -19,6 +19,7 @@ internal static class StartupHelperExtensions
         builder.Services.AddControllers(configure =>
         {
             configure.ReturnHttpNotAcceptable = true;
+            configure.CacheProfiles.Add("240SecCashProfile", new() { Duration = 240 });
         })
             .AddNewtonsoftJson(setupAction =>
             {
@@ -71,6 +72,28 @@ internal static class StartupHelperExtensions
         builder.Services.AddAutoMapper(
             AppDomain.CurrentDomain.GetAssemblies());
 
+        // In case of the need of cahsing.
+        builder.Services.AddResponseCaching();
+
+        // Marvin.Cache.Headers is used to add http cache related headers to http response like 
+        // cache-control, expire, etag and last-modified and do the validation and expiration model.
+        builder.Services.AddHttpCacheHeaders(
+            (expirationModelOption) =>
+            {
+                expirationModelOption.MaxAge = 60;
+
+                // When location set to Private, it won't be served from the response cache
+                // and no "age" header will be added to the response.
+                // private: client cache (i.e. browser, mobile phone), public: server cache.
+                expirationModelOption.CacheLocation = 
+                Marvin.Cache.Headers.CacheLocation.Private;
+            }, 
+            (validationModel) =>
+            {
+                // if the response become stale (old) a revalidation (new etag is generted) must happen
+                validationModel.MustRevalidate = true;
+            });
+
         return builder.Build();
     }
 
@@ -98,6 +121,11 @@ internal static class StartupHelperExtensions
                 });
             });
         }
+
+        // In case of the need of cahsing.(no need to be used if Marvin.Http.Headers is used)
+        // app.UseResponseCaching();
+
+        app.UseHttpCacheHeaders();
 
         app.UseAuthorization();
 

@@ -2,6 +2,7 @@
 using AutoMapper;
 using CourseLibrary.API.Models;
 using CourseLibrary.API.Services;
+using Marvin.Cache.Headers;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -12,6 +13,12 @@ namespace CourseLibrary.API.Controllers;
 
 [ApiController]
 [Route("api/authors/{authorId}/courses")]
+
+[HttpCacheExpiration(CacheLocation = CacheLocation.Public)]
+[HttpCacheValidation(MustRevalidate = true)]
+
+// if Marvin.Http.Headers is used, no need to put the following attribute
+// [ResponseCache(CacheProfileName = "240SecCashProfile")] 
 public class CoursesController : ControllerBase
 {
     private readonly ICourseLibraryRepository _courseLibraryRepository;
@@ -38,7 +45,14 @@ public class CoursesController : ControllerBase
         return Ok(_mapper.Map<IEnumerable<CourseDto>>(coursesForAuthorFromRepo));
     }
 
+    // To add cashing, we need to first specify if a resource can be cashable or not by adding Cashe-Control
+    // Header using [ResponseCashe] attribute, and secondly by adding a cashe store middleware.
+    // [ResponseCache(Duration = 120)]     // duration in seconds.
+    // if Marvin.Http.Headers is used, no need to put the above attribute
+
     [HttpGet("{courseId}", Name = nameof(GetCourseForAuthor))]
+    [HttpCacheExpiration(CacheLocation = CacheLocation.Public, MaxAge = 1000)]
+    [HttpCacheValidation(MustRevalidate = true)]
     public async Task<ActionResult<CourseDto>> GetCourseForAuthor(Guid authorId, Guid courseId)
     {
         if (!await _courseLibraryRepository.AuthorExistsAsync(authorId))
@@ -108,19 +122,19 @@ public class CoursesController : ControllerBase
         if (!await _courseLibraryRepository.AuthorExistsAsync(authorId))
             return NotFound();
 
-        var courseForAuthorFromRepo = 
+        var courseForAuthorFromRepo =
             await _courseLibraryRepository.GetCourseAsync(authorId, courseId);
 
-        if (courseForAuthorFromRepo == null) 
+        if (courseForAuthorFromRepo == null)
             return NotFound();
 
         var courseToPatch = _mapper.Map<CourseForUpdateDto>(courseForAuthorFromRepo);
-        
+
         patchDocument.ApplyTo(courseToPatch, ModelState);
 
         // by default, ValidationProblem() does not use the configured InvalidModelStateResponse
         // defined in the StartupHelperExtensions, but we can override it.
-        if (!TryValidateModel(courseToPatch)) 
+        if (!TryValidateModel(courseToPatch))
             return ValidationProblem(ModelState);
 
         _mapper.Map(courseToPatch, courseForAuthorFromRepo);
